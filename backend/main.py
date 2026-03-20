@@ -1406,6 +1406,45 @@ async def api_optimize(symbol: str = "XAUUSD", max_combos: int = 30):
     result = await asyncio.to_thread(optimize_parameters, candles, max_combos)
     return result
 
+@app.post("/backtest/learn")
+async def api_backtest_learn(
+    symbol: str = "XAUUSD",
+    candle_count: int = 5000,
+    teach_every_n: int = 1,
+    max_teach: int = 200,
+):
+    """
+    Run backtest → feed every trade through UltraThink → store lessons.
+    This rapidly trains the bot's memory on historical data.
+    """
+    from ai.ultra_backtester import ultra_learn_from_backtest, UltraBacktestConfig
+    from data.history_cache import load_from_cache, save_to_cache
+
+    candles = []
+    if mt5_connector and mt5_connector.is_connected:
+        candles = mt5_connector.get_history(symbol, count=candle_count)
+    if not candles:
+        eng = engines.get(symbol)
+        if eng:
+            candles = list(eng.store._candles_1m)
+    if not candles:
+        candles = load_from_cache(symbol)
+    if len(candles) < 200:
+        from fastapi import HTTPException
+        raise HTTPException(400, f"Not enough candles ({len(candles)}). Need 200+, got {len(candles)}")
+
+    save_to_cache(symbol, candles)
+
+    config = UltraBacktestConfig(
+        teach_every_n=teach_every_n,
+        max_teach_trades=max_teach,
+        use_regime=True,
+        use_trailing_stop=True,
+    )
+    result = await ultra_learn_from_backtest(candles, config, symbol=symbol)
+    return result
+
+
 @app.get("/cache/info")
 async def cache_info():
     """Get info about cached historical data."""
