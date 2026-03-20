@@ -214,17 +214,27 @@ async def on_trade_close_hook(symbol: str, eng, ind_1m: dict, regime_state,
 
 
 def _apply_ultra_signal_adjustments(signal_learner, adjustments: dict):
-    """Apply UltraThink's signal weight recommendations to the SignalWeightLearner."""
+    """Apply UltraThink's signal weight recommendations to the SignalWeightLearner.
+    Also updates the global SIGNAL_WEIGHTS in the engine for immediate effect."""
+    from ai.signal_engine import SIGNAL_WEIGHTS
+
     for signal_name, adjustment in adjustments.items():
         if not isinstance(adjustment, (int, float)):
             continue
         adjustment = max(-0.3, min(0.3, float(adjustment)))  # Clamp
-        if signal_name in signal_learner.signal_scores:
-            score = signal_learner.signal_scores[signal_name]
-            # Nudge the weight multiplier by the adjustment
-            new_mult = score["weight_mult"] + adjustment
-            score["weight_mult"] = max(0.2, min(2.0, new_mult))  # Keep within sane bounds
-            logger.debug(f"UltraThink adjusted {signal_name} weight: {adjustment:+.2f} → {score['weight_mult']:.2f}")
+
+        # Update SignalWeightLearner (create entry if not exists)
+        score = signal_learner.signal_scores[signal_name]  # defaultdict auto-creates
+        new_mult = score["weight_mult"] + adjustment
+        score["weight_mult"] = max(0.2, min(2.5, new_mult))
+        logger.info(f"UltraThink adjusted {signal_name}: {adjustment:+.2f} → mult={score['weight_mult']:.2f}")
+
+        # Also nudge the base SIGNAL_WEIGHTS directly for immediate effect
+        if signal_name in SIGNAL_WEIGHTS:
+            base = SIGNAL_WEIGHTS[signal_name]
+            new_base = max(0.3, min(2.5, base + adjustment * 0.5))  # gentler on base weights
+            SIGNAL_WEIGHTS[signal_name] = round(new_base, 2)
+            logger.info(f"  Base weight {signal_name}: {base:.2f} → {new_base:.2f}")
 
 
 # ── Lesson access (delegated to UltraMemory) ────────────────────────────────
