@@ -530,9 +530,19 @@ async def on_candle_close(candle: dict, symbol: str):
     blackout_ok = not blackout.active or blackout.zone == "CAUTION"
     blackout_size_mod = blackout.size_modifier if blackout.active else 1.0
 
+    # ── R:R GATE: minimum 1.5:1 reward-to-risk ──────────────────────
+    rr_ok = True
+    if should_trade and final_direction != 0:
+        sl_dist = atr * regime_params["stop_atr_mult"]
+        tp_dist = atr * regime_params["tp_atr_mult"]
+        rr_ratio = tp_dist / (sl_dist + 1e-9)
+        if rr_ratio < 1.5:
+            rr_ok = False
+            logger.info(f"[{symbol}] Trade BLOCKED: R:R too low ({rr_ratio:.2f}:1, need 1.5:1)")
+
     if should_trade and final_direction != 0 and eng.portfolio.position is None \
             and eng.candle_count >= MIN_CANDLES and cooldown_ok \
-            and mtf["aligned"] and outcome_check["ok"] and blackout_ok:
+            and mtf["aligned"] and outcome_check["ok"] and blackout_ok and rr_ok:
 
         reasoning = signal.reasoning
         if rl_confidence > 0.85 and signal.direction == 0:
@@ -570,7 +580,7 @@ async def on_candle_close(candle: dict, symbol: str):
 
     if should_trade and final_direction != 0 and eng.portfolio.position is None \
             and eng.candle_count >= MIN_CANDLES and cooldown_ok \
-            and mtf["aligned"] and outcome_check["ok"] and blackout_ok:
+            and mtf["aligned"] and outcome_check["ok"] and blackout_ok and rr_ok:
 
         # Dynamic sizing: scale by confidence + anti-martingale + blackout + adversarial
         conf = signal.confidence if signal.direction != 0 else rl_confidence
