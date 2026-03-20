@@ -96,6 +96,8 @@ class SymbolEngine:
     prev_regime: str = "UNKNOWN"
 
     def __post_init__(self):
+        from indicators.structure_analyzer import StructureAnalyzer
+        self.structure_analyzer = StructureAnalyzer(swing_lookback=3, max_zones=30)
         model_path = os.path.join(MODEL_DIR, f"ppo_{self.symbol.lower()}.zip")
         self.rl_agent = RLAgent(model_path=model_path)
         if os.path.exists(model_path):
@@ -548,6 +550,23 @@ async def on_candle_close(candle: dict, symbol: str):
         if rl_confidence > 0.85 and signal.direction == 0:
             reasoning = f"RL OVERRIDE (conf={rl_confidence:.2f}) | {reasoning}"
         reasoning += f" | MTF:{mtf['score']:.0%}"
+
+        # Add Smart Money structure context to reasoning
+        _active_fvgs = [f for f in _struct_zones.get("fvgs", []) if not f.get("filled")]
+        _recent_bos = _struct_zones.get("bos", [])[-3:]
+        if _active_fvgs:
+            bull_fvgs = sum(1 for f in _active_fvgs if f["type"] == "BULL")
+            bear_fvgs = sum(1 for f in _active_fvgs if f["type"] == "BEAR")
+            # Check if price is inside any FVG (potential confluence zone)
+            for fvg in _active_fvgs:
+                if fvg["bottom"] <= price <= fvg["top"]:
+                    reasoning += f" | IN {fvg['type']}_FVG({fvg['bottom']:.0f}-{fvg['top']:.0f})"
+                    break
+            else:
+                reasoning += f" | FVG:B{bull_fvgs}/S{bear_fvgs}"
+        if _recent_bos:
+            last_bos = _recent_bos[-1]
+            reasoning += f" | {last_bos['type']}@{last_bos['price']:.0f}"
         if blackout.zone == "CAUTION":
             reasoning += f" | CAUTION: {blackout.event_name} in {blackout.minutes_until:.0f}m"
 
@@ -675,6 +694,16 @@ async def on_candle_close(candle: dict, symbol: str):
         _ai_state, _ai_reason = "scanning", f"Low confidence ({signal.confidence:.0%})"
     else:
         _ai_state, _ai_reason = "scanning", "No signal alignment"
+
+    # ── Structure analysis (FVG, BOS, CHoCH, Order Blocks) ──
+    _struct_candle = {
+        "time": candle["open_time"] // 1000,
+        "open": candle["open"], "high": candle["high"],
+        "low": candle["low"], "close": price,
+        "volume": candle.get("volume", candle.get("tick_volume", 0)),
+    }
+    _struct_new = eng.structure_analyzer.update(_struct_candle)
+    _struct_zones = eng.structure_analyzer.get_all_zones()
 
     await broadcast("candle_close", {
         "symbol": symbol,
@@ -814,6 +843,8 @@ async def on_candle_close(candle: dict, symbol: str):
             "confidence_modifier": round(kb_trading_context["confidence_modifier"], 3),
             "source_pdfs": [f"{c.get('source_pdf','')}:p{c.get('page_num','')}" for c in (kb_context or [])[:3]],
         } if kb_trading_context else None,
+        # ── Smart Money Structure (FVG, BOS, CHoCH, Order Blocks) ──
+        "structure_zones": _struct_zones,
     })
 
     # ── Claude advisory hook (non-blocking) ──
