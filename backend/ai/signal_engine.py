@@ -162,6 +162,39 @@ def evaluate_signals(
     # ── Evaluate mean-reversion strategy ─────────────────────────────────
     reversion_result = _evaluate_reversion_strategy(raw, ind_1m, adx, preferred_direction)
 
+    # ── HARD TREND ALIGNMENT GATE ──────────────────────────────────────
+    # This is the #1 fix for counter-trend trading.
+    # If higher timeframes (5m + 15m) agree on direction, BLOCK the opposite.
+    # No more buying in a bearish crash or selling in a bullish rally.
+    ema_5m_val = raw.get("ema_5m", 0)
+    ema_15m_val = raw.get("ema_15m", 0)
+    supertrend_val = raw.get("supertrend", 0)
+
+    # Strong bearish HTF alignment: block ALL longs
+    htf_bearish = (ema_5m_val < -0.15 and ema_15m_val < -0.15) or \
+                  (ema_5m_val < -0.3 and supertrend_val < 0) or \
+                  (ema_15m_val < -0.3 and supertrend_val < 0)
+
+    # Strong bullish HTF alignment: block ALL shorts
+    htf_bullish = (ema_5m_val > 0.15 and ema_15m_val > 0.15) or \
+                  (ema_5m_val > 0.3 and supertrend_val > 0) or \
+                  (ema_15m_val > 0.3 and supertrend_val > 0)
+
+    def _gate_direction(result: SignalResult) -> SignalResult:
+        """Kill counter-trend signals that fight the higher-TF trend."""
+        if result.direction == 1 and htf_bearish:
+            return SignalResult(0, 0.0, 0,
+                f"BLOCKED LONG: HTF bearish (5m={ema_5m_val:.2f}, 15m={ema_15m_val:.2f}, ST={supertrend_val:.1f})",
+                result.raw_signals, result.strategy)
+        if result.direction == -1 and htf_bullish:
+            return SignalResult(0, 0.0, 0,
+                f"BLOCKED SHORT: HTF bullish (5m={ema_5m_val:.2f}, 15m={ema_15m_val:.2f}, ST={supertrend_val:.1f})",
+                result.raw_signals, result.strategy)
+        return result
+
+    trend_result = _gate_direction(trend_result)
+    reversion_result = _gate_direction(reversion_result)
+
     # Pick the stronger signal
     if trend_result.confidence >= reversion_result.confidence and trend_result.direction != 0:
         best = trend_result

@@ -158,51 +158,54 @@ def get_regime_params(regime: Regime) -> dict:
     """Return risk params appropriate for this regime."""
     # SCALPING CONFIG — tight SL/TP for 1-minute timeframe
     # Designed for quick in-and-out trades (30s-2min hold)
+    # XAUUSD SCALPING CONFIG — wider stops for gold's volatility
+    # Gold moves $5-15/candle on 1m — ultra-tight stops get wicked out instantly.
+    # R:R enforced at entry time (min 1.5:1 in ultra_backtester + live engine).
     params = {
         Regime.TRENDING_UP: {
-            "stop_atr_mult": 0.3,
-            "tp_atr_mult": 0.8,
+            "stop_atr_mult": 0.8,       # was 0.3 — gold needs room to breathe
+            "tp_atr_mult": 1.8,         # was 0.8 — 2.25:1 R:R
             "min_signals": 3,
             "size_mult": 1.2,
-            "preferred_direction": 1,
-            "trail_after_atr": 0.4,
-            "cooldown_s": 90,       # wait for quality setups
+            "preferred_direction": 1,   # ONLY longs in uptrend
+            "trail_after_atr": 0.6,
+            "cooldown_s": 90,
         },
         Regime.TRENDING_DOWN: {
-            "stop_atr_mult": 0.3,
-            "tp_atr_mult": 0.8,
+            "stop_atr_mult": 0.8,
+            "tp_atr_mult": 1.8,
             "min_signals": 3,
             "size_mult": 1.2,
-            "preferred_direction": -1,
-            "trail_after_atr": 0.4,
+            "preferred_direction": -1,  # ONLY shorts in downtrend
+            "trail_after_atr": 0.6,
             "cooldown_s": 90,
         },
         Regime.RANGING: {
-            "stop_atr_mult": 0.25,
-            "tp_atr_mult": 0.5,
+            "stop_atr_mult": 0.6,       # was 0.25 — ranging gold still volatile
+            "tp_atr_mult": 1.0,         # was 0.5 — 1.67:1 R:R
             "min_signals": 4,
             "size_mult": 0.7,
             "preferred_direction": 0,
-            "trail_after_atr": 0.3,
-            "cooldown_s": 180,      # very patient in choppy markets
+            "trail_after_atr": 0.4,
+            "cooldown_s": 180,
         },
         Regime.BREAKOUT: {
-            "stop_atr_mult": 0.35,
-            "tp_atr_mult": 1.0,
+            "stop_atr_mult": 0.7,       # was 0.35 — breakouts retrace
+            "tp_atr_mult": 1.8,         # was 1.0 — let breakouts run
             "min_signals": 3,
             "size_mult": 1.0,
             "preferred_direction": 0,
-            "trail_after_atr": 0.5,
-            "cooldown_s": 60,       # faster on breakouts
+            "trail_after_atr": 0.7,
+            "cooldown_s": 60,
         },
         Regime.TRANSITION: {
-            "stop_atr_mult": 0.25,
-            "tp_atr_mult": 0.5,
-            "min_signals": 4,
-            "size_mult": 0.5,
+            "stop_atr_mult": 0.6,       # was 0.25 — transition = uncertain, need room
+            "tp_atr_mult": 1.0,         # was 0.5
+            "min_signals": 5,           # was 4 — need MORE confirmation in transitions
+            "size_mult": 0.4,           # was 0.5 — smaller size when unsure
             "preferred_direction": 0,
-            "trail_after_atr": 0.3,
-            "cooldown_s": 120,
+            "trail_after_atr": 0.4,
+            "cooldown_s": 150,          # was 120 — more patience
         },
     }
     return params[regime]

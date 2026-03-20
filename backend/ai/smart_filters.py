@@ -39,15 +39,24 @@ def check_mtf_confluence(ind_1m: dict, ind_5m: dict, ind_15m: dict,
     bias_15m = get_bias(ind_15m)
 
     # Check alignment with desired direction
-    aligned_1m = (direction * bias_1m) > 0.05
-    aligned_5m = (direction * bias_5m) > 0.05 if ind_5m else True  # no data = neutral
-    aligned_15m = (direction * bias_15m) > 0.05 if ind_15m else True
+    # Threshold raised from 0.05 → 0.12 to stop noise-level "alignment"
+    aligned_1m = (direction * bias_1m) > 0.12
+    aligned_5m = (direction * bias_5m) > 0.12 if ind_5m else False  # no data = NOT aligned (was True)
+    aligned_15m = (direction * bias_15m) > 0.12 if ind_15m else False
+
+    # Check for strong COUNTER-trend on higher TFs (hard block)
+    counter_5m = (direction * bias_5m) < -0.15 if ind_5m else False
+    counter_15m = (direction * bias_15m) < -0.15 if ind_15m else False
 
     aligned_count = sum([aligned_1m, aligned_5m, aligned_15m])
     score = aligned_count / 3.0
 
-    # At least 2 of 3 timeframes must agree
-    aligned = aligned_count >= 2
+    # HARD BLOCK: if BOTH higher TFs are counter-trend, never align
+    if counter_5m and counter_15m:
+        aligned = False
+    else:
+        # At least 2 of 3 timeframes must agree
+        aligned = aligned_count >= 2
 
     details_parts = []
     for tf, bias, ok in [("1m", bias_1m, aligned_1m), ("5m", bias_5m, aligned_5m), ("15m", bias_15m, aligned_15m)]:

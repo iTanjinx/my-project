@@ -303,10 +303,20 @@ def run_ultra_backtest(candles: list[dict],
             )
 
             if signal.direction != 0 and signal.confidence >= min_conf:
+                candidate_stop = price - signal.direction * sl_mult * atr
+                candidate_tp = price + signal.direction * tp_mult * atr
+                sl_dist = abs(price - candidate_stop)
+                tp_dist = abs(candidate_tp - price)
+
+                # ── R:R GATE: minimum 1.5:1 reward-to-risk ──
+                rr_ratio = tp_dist / (sl_dist + 1e-9)
+                if rr_ratio < 1.5:
+                    continue  # skip low-R:R setups
+
                 position = signal.direction
                 entry_price = price
-                stop_price = price - position * sl_mult * atr
-                tp_price = price + position * tp_mult * atr
+                stop_price = candidate_stop
+                tp_price = candidate_tp
                 trail_price = 0.0
                 entry_idx = i
                 entry_regime = regime_str
