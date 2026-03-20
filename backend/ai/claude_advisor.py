@@ -628,7 +628,7 @@ Consider the bot's accumulated knowledge above — reference past patterns, rein
                 f"  {'WIN' if t.get('pnl_usd', 0) > 0 else 'LOSS'} "
                 f"{'LONG' if t.get('direction') == 1 else 'SHORT'} "
                 f"{t.get('symbol', '?')} ${t.get('pnl_usd', 0):+.2f} "
-                f"| {t.get('exit_reason', '?')} | {t.get('entry_regime', '?')}"
+                f"| {t.get('exit_reason', '?')} | {t.get('regime', '?')}"
             )
 
         signal_text = ""

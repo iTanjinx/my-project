@@ -123,15 +123,15 @@ async def on_candle_hook(symbol: str, eng, ind_1m: dict, regime_state,
     blackout_mgr = get_blackout_manager()
     result["blackout"] = blackout_mgr.get_status()
 
-    # Add blackout + macro data
-    blackout_mgr = get_blackout_manager()
-    result["blackout"] = blackout_mgr.get_status()
-
-    # Fetch macro data periodically (non-blocking)
-    try:
-        await blackout_mgr.fetch_macro_data()
-    except Exception:
-        pass
+    # Fetch macro data periodically (honor throttle interval)
+    global _last_event_check
+    now = time.time()
+    if now - _last_event_check >= EVENT_CHECK_INTERVAL_S:
+        _last_event_check = now
+        try:
+            await blackout_mgr.fetch_macro_data()
+        except Exception:
+            pass
 
     return result
 
